@@ -33,6 +33,11 @@ def calculate_charge(
     raise ValueError(f"Unsupported spec: {spec}")
 
 
+@app.get("/")
+def root() -> dict[str, str]:
+    return {"service": "proration", "status": "ok"}
+
+
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
