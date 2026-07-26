@@ -6,9 +6,12 @@ from fastapi import FastAPI, HTTPException, Request
 from pydantic import BaseModel, Field
 
 Q3_DIR = Path(__file__).resolve().parent / "Q3"
+Q4_DIR = Path(__file__).resolve().parent / "Q4"
 sys.path.insert(0, str(Q3_DIR))
+sys.path.insert(0, str(Q4_DIR))
 
 from policy import evaluate_tool_call  # noqa: E402
+from scanner import scan_skill  # noqa: E402
 
 app = FastAPI(title="GA5 Services")
 
@@ -28,6 +31,10 @@ class ProrationResponse(BaseModel):
 class GuardrailResponse(BaseModel):
     decision: Literal["allow", "block"]
     reason: str
+
+
+class ScanResponse(BaseModel):
+    categories: list[str]
 
 
 def calculate_charge(
@@ -50,6 +57,13 @@ def calculate_charge(
 def _guardrail_response(payload: dict[str, Any]) -> GuardrailResponse:
     decision, reason = evaluate_tool_call(payload)
     return GuardrailResponse(decision=decision, reason=reason)
+
+
+def _scan_response(payload: dict[str, Any]) -> ScanResponse:
+    skill = payload.get("skill", "")
+    if not isinstance(skill, str):
+        raise HTTPException(status_code=400, detail="Field 'skill' must be a string.")
+    return ScanResponse(categories=scan_skill(skill))
 
 
 def _proration_response(payload: dict[str, Any]) -> ProrationResponse:
@@ -78,7 +92,9 @@ def health() -> dict[str, str]:
 
 
 @app.post("/")
-async def post_root(request: Request) -> GuardrailResponse | ProrationResponse:
+async def post_root(
+    request: Request,
+) -> GuardrailResponse | ProrationResponse | ScanResponse:
     try:
         payload = await request.json()
     except Exception as exc:
@@ -87,6 +103,8 @@ async def post_root(request: Request) -> GuardrailResponse | ProrationResponse:
     if not isinstance(payload, dict):
         raise HTTPException(status_code=400, detail="JSON body must be an object.")
 
+    if "skill" in payload:
+        return _scan_response(payload)
     if "tool" in payload:
         return _guardrail_response(payload)
     if "old_price" in payload:
@@ -94,7 +112,7 @@ async def post_root(request: Request) -> GuardrailResponse | ProrationResponse:
 
     raise HTTPException(
         status_code=400,
-        detail="Unrecognized payload. Expected guardrail or proration fields.",
+        detail="Unrecognized payload. Expected skill, guardrail, or proration fields.",
     )
 
 
@@ -114,3 +132,16 @@ async def guardrail(request: Request) -> GuardrailResponse:
         raise HTTPException(status_code=400, detail="JSON body must be an object.")
 
     return _guardrail_response(payload)
+
+
+@app.post("/scan", response_model=ScanResponse)
+async def scan(request: Request) -> ScanResponse:
+    try:
+        payload = await request.json()
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail="Invalid JSON body.") from exc
+
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail="JSON body must be an object.")
+
+    return _scan_response(payload)
