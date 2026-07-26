@@ -157,14 +157,21 @@ def _scan_text(
     return None
 
 
+def _as_text(value: object) -> str:
+    if value is None:
+        return ""
+    return str(value)
+
+
 def evaluate_bash(command: str) -> tuple[Decision, str]:
-    violation = _scan_text(command)
+    violation = _scan_text(_as_text(command))
     if violation is not None:
         return violation
     return ("allow", "Bash command complies with the agent security policy.")
 
 
 def evaluate_write_file(path: str) -> tuple[Decision, str]:
+    path = _as_text(path)
     if is_secret_path(path):
         return (
             "block",
@@ -179,7 +186,7 @@ def evaluate_write_file(path: str) -> tuple[Decision, str]:
 
 
 def evaluate_http_request(url: str) -> tuple[Decision, str]:
-    parsed = urlparse(url)
+    parsed = urlparse(_as_text(url))
 
     if parsed.scheme in {"", "file"}:
         target = parsed.path or url
@@ -214,15 +221,12 @@ def evaluate_tool_call(payload: dict) -> tuple[Decision, str]:
     tool = payload.get("tool")
 
     if tool == "bash":
-        command = payload.get("command", "")
-        return evaluate_bash(command)
+        return evaluate_bash(payload.get("command", ""))
 
     if tool == "write_file":
-        path = payload.get("path", "")
-        return evaluate_write_file(path)
+        return evaluate_write_file(payload.get("path", ""))
 
     if tool == "http_request":
-        url = payload.get("url", "")
-        return evaluate_http_request(url)
+        return evaluate_http_request(payload.get("url", ""))
 
     return ("block", f"Unknown tool: {tool!r}.")

@@ -1,7 +1,17 @@
 services:
   - type: web
-    name: ga5-proration
+    name: tds-ga-5
     runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: APP_ENV
+        value: production
+  - type: web
+    name: ga5-guardrail
+    runtime: python
+    rootDir: Q3
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /health

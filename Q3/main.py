@@ -1,6 +1,6 @@
 from typing import Any, Literal
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException, Request
 from pydantic import BaseModel
 
 from policy import evaluate_tool_call
@@ -25,6 +25,14 @@ def health() -> dict[str, str]:
 
 @app.post("/", response_model=GuardrailResponse)
 @app.post("/guardrail", response_model=GuardrailResponse)
-def guardrail(payload: dict[str, Any]) -> GuardrailResponse:
+async def guardrail(request: Request) -> GuardrailResponse:
+    try:
+        payload = await request.json()
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail="Invalid JSON body.") from exc
+
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail="JSON body must be an object.")
+
     decision, reason = evaluate_tool_call(payload)
     return GuardrailResponse(decision=decision, reason=reason)
