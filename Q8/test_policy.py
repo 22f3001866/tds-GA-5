@@ -129,7 +129,6 @@ def test_block_canary_traversal() -> None:
 
 
 if __name__ == "__main__":
-    setup_files()
     tests = [value for name, value in globals().items() if name.startswith("test_")]
     for test in tests:
         test()

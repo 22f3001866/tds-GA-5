@@ -46,10 +46,24 @@ def evaluate_read_file(path: str) -> tuple[Action, str]:
 def _candidate_read_paths(path: str) -> list[str]:
     raw = path.strip()
     decoded = unquote(raw)
-    if not decoded.startswith("/"):
-        decoded = posixpath.join(SANDBOX_ROOT, decoded)
 
-    candidates = [raw, decoded, posixpath.normpath(decoded)]
+    candidates: list[str] = []
+    if raw.startswith("/"):
+        candidates.append(raw)
+    else:
+        candidates.append(posixpath.join(SANDBOX_ROOT, raw))
+
+    if decoded.startswith("/"):
+        candidates.append(decoded)
+    else:
+        candidates.append(posixpath.join(SANDBOX_ROOT, decoded))
+
+    candidates.append(
+        posixpath.normpath(
+            decoded if decoded.startswith("/") else posixpath.join(SANDBOX_ROOT, decoded)
+        )
+    )
+
     unique: list[str] = []
     for candidate in candidates:
         if candidate not in unique:
