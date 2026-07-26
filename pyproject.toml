@@ -1,0 +1,9 @@
+[project]
+name = "ga5-proration"
+version = "0.1.0"
+description = "Proration calculator with v1 and v2 billing specs"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115.0",
+    "uvicorn>=0.32.0",
+]
