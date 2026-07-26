@@ -1,17 +1,28 @@
-import sys
+import importlib.util
 from pathlib import Path
 from typing import Any, Literal
 
 from fastapi import FastAPI, HTTPException, Request
 from pydantic import BaseModel, Field
 
-Q3_DIR = Path(__file__).resolve().parent / "Q3"
-Q4_DIR = Path(__file__).resolve().parent / "Q4"
-sys.path.insert(0, str(Q3_DIR))
-sys.path.insert(0, str(Q4_DIR))
+ROOT_DIR = Path(__file__).resolve().parent
+Q3_DIR = ROOT_DIR / "Q3"
+Q4_DIR = ROOT_DIR / "Q4"
+Q5_DIR = ROOT_DIR / "Q5"
 
-from policy import evaluate_tool_call  # noqa: E402
-from scanner import scan_skill  # noqa: E402
+
+def _load_symbol(module_path: Path, module_name: str, symbol: str) -> Any:
+    spec = importlib.util.spec_from_file_location(module_name, module_path)
+    if spec is None or spec.loader is None:
+        raise ImportError(f"Unable to load module from {module_path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return getattr(module, symbol)
+
+
+evaluate_tool_call = _load_symbol(Q3_DIR / "policy.py", "q3_policy", "evaluate_tool_call")
+scan_skill = _load_symbol(Q4_DIR / "scanner.py", "q4_scanner", "scan_skill")
+evaluate_run_control = _load_symbol(Q5_DIR / "policy.py", "q5_policy", "evaluate_run_control")
 
 app = FastAPI(title="GA5 Services")
 
@@ -35,6 +46,11 @@ class GuardrailResponse(BaseModel):
 
 class ScanResponse(BaseModel):
     categories: list[str]
+
+
+class RunControlResponse(BaseModel):
+    decision: Literal["continue", "halt"]
+    reason: str
 
 
 def calculate_charge(
@@ -66,6 +82,11 @@ def _scan_response(payload: dict[str, Any]) -> ScanResponse:
     return ScanResponse(categories=scan_skill(skill))
 
 
+def _run_guard_response(payload: dict[str, Any]) -> RunControlResponse:
+    decision, reason = evaluate_run_control(payload)
+    return RunControlResponse(decision=decision, reason=reason)
+
+
 def _proration_response(payload: dict[str, Any]) -> ProrationResponse:
     request = ProrationRequest(**payload)
     try:
@@ -94,7 +115,7 @@ def health() -> dict[str, str]:
 @app.post("/")
 async def post_root(
     request: Request,
-) -> GuardrailResponse | ProrationResponse | ScanResponse:
+) -> GuardrailResponse | ProrationResponse | ScanResponse | RunControlResponse:
     try:
         payload = await request.json()
     except Exception as exc:
@@ -103,6 +124,8 @@ async def post_root(
     if not isinstance(payload, dict):
         raise HTTPException(status_code=400, detail="JSON body must be an object.")
 
+    if "budget_tokens" in payload and "steps" in payload:
+        return _run_guard_response(payload)
     if "skill" in payload:
         return _scan_response(payload)
     if "tool" in payload:
@@ -112,7 +135,7 @@ async def post_root(
 
     raise HTTPException(
         status_code=400,
-        detail="Unrecognized payload. Expected skill, guardrail, or proration fields.",
+        detail="Unrecognized payload. Expected run guard, skill, guardrail, or proration fields.",
     )
 
 
@@ -145,3 +168,16 @@ async def scan(request: Request) -> ScanResponse:
         raise HTTPException(status_code=400, detail="JSON body must be an object.")
 
     return _scan_response(payload)
+
+
+@app.post("/run-guard", response_model=RunControlResponse)
+async def run_guard(request: Request) -> RunControlResponse:
+    try:
+        payload = await request.json()
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail="Invalid JSON body.") from exc
+
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail="JSON body must be an object.")
+
+    return _run_guard_response(payload)

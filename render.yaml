@@ -28,3 +28,13 @@ services:
     envVars:
       - key: APP_ENV
         value: production
+  - type: web
+    name: ga5-run-guard
+    runtime: python
+    rootDir: Q5
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: APP_ENV
+        value: production
